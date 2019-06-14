@@ -1,0 +1,2 @@
+# Oauth-js
+Deze vanilla js library is bedoeld om framework onafhankelijk oauth2 OIDC support te geven voor javascript apps. Deze library zorgt voor het uitwisselen van access tokens met de IDP en het verversen van deze token via een hidden iframe met de OIDC promt = none flow.
