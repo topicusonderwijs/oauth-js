@@ -16,8 +16,12 @@ function authorize(config) {
 
       window.localStorage.setItem('codeVerifier', codeVerifier);
 
-      const url = `${loginUrl}?client_id=${config.clientId}&code_challenge_method=S256&code_challenge=${codeChallenge}
-      &redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
+      // const url = `${loginUrl}?client_id=${config.clientId}&code_challenge_method=S256&code_challenge=${codeChallenge}
+      // &redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
+
+      const url = `${loginUrl}?client_id=${config.clientId}&redirect_uri=${redirectUri}&response_type=code
+      &state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
+
       resolve(url);
     };
 
@@ -43,7 +47,6 @@ function exchangeToken(code, config) {
 
     xhr.onreadystatechange = function () {
       if (xhr.readyState === XMLHttpRequest.DONE) {
-        window.localStorage.removeItem('random');
         window.localStorage.removeItem('codeVerifier');
 
         if (xhr.status === 200) {
@@ -79,23 +82,27 @@ function generateRandomString(amount) {
   return arr2.join("");
 }
 
-function setup(config) {
-  if (!config) {
-    return;
-  }
-
-  const iFrameElement = _createIFrame();
-  const container = document.getElementById(config.container);
+function setupIFrame(config) {
+  const iFrameElement = _createIFrame(config);
+  const container = document.getElementById('iframeContainer');
   container.appendChild(iFrameElement);
 }
 
-function _createIFrame() {
+function _createIFrame(config) {
   const iFrameElement = document.createElement('iframe');
   iFrameElement.setAttribute("src", 'https://www.google.com/webhp?igu=1');
   iFrameElement.style.width = "40rem";
   iFrameElement.style.height = "20rem";
 
   return iFrameElement;
+}
+
+function inIframe () {
+  try {
+    return window.self !== window.top;
+  } catch (e) {
+    return true;
+  }
 }
 
 module.exports.authorize = authorize;
