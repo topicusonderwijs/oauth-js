@@ -2,7 +2,7 @@ const Base64url = require('base64url');
 const TextEncodingShim = require('text-encoding-shim');
 const Promise = require('promise-polyfill').default;
 
-function authorize(data) {
+function authorize(config) {
   return new Promise((resolve, reject) => {
     const crypto = window.crypto || window.msCrypto;
     const codeVerifier = generateRandomString(32);
@@ -11,12 +11,12 @@ function authorize(data) {
     const onSuccess = (hash) => {
       const state = generateRandomString(25);
       const codeChallenge = Base64url.encode(hash);
-      const redirectUri = encodeURI(data.origin);
-      const loginUrl = `${data.loginUrl}/oauth2/authorize`;
+      const redirectUri = encodeURI(config.origin);
+      const loginUrl = `${config.loginUrl}/oauth2/authorize`;
 
       window.localStorage.setItem('codeVerifier', codeVerifier);
 
-      const url = `${loginUrl}?client_id=${data.clientId}&code_challenge_method=S256&code_challenge=${codeChallenge}
+      const url = `${loginUrl}?client_id=${config.clientId}&code_challenge_method=S256&code_challenge=${codeChallenge}
       &redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
       resolve(url);
     };
@@ -37,7 +37,7 @@ function invalidate() {
   // logout
 }
 
-function exchangeToken(config) {
+function exchangeToken(code, config) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
@@ -58,7 +58,7 @@ function exchangeToken(config) {
     };
 
     const codeVerifier = window.localStorage.getItem('codeVerifier');
-    const url = `${config.loginUrl}?code=${config.code}&client_id=${config.clientId}&grant_type=authorization_code&code_verifier=${codeVerifier}`;
+    const url = `${config.loginUrl}?code=${code}&client_id=${config.clientId}&grant_type=authorization_code&code_verifier=${codeVerifier}`;
 
     xhr.open("POST", url, true);
     xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
