@@ -18,5 +18,10 @@
   "bugs": {
     "url": "https://github.com/topicusonderwijs/oauth-js/issues"
   },
-  "homepage": "https://github.com/topicusonderwijs/oauth-js#readme"
+  "homepage": "https://github.com/topicusonderwijs/oauth-js#readme",
+  "dependencies": {
+    "base64url": "~3.0.1",
+    "text-encoding-shim": "1.0.0",
+    "promise-polyfill": "^8.1.3"
+  }
 }
