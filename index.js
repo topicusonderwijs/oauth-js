@@ -2,16 +2,51 @@ const Base64url = require('base64url');
 const TextEncodingShim = require('text-encoding-shim');
 const Promise = require('promise-polyfill').default;
 
+let onSilentCallback;
+let onErrorCallback;
+
+// Fixme
 function authorize(config) {
+  const crypto = window.crypto || window.msCrypto;
+  const codeVerifier = generateRandomString(32);
+  const uint8array = new TextEncodingShim.TextEncoder('utf-8').encode(codeVerifier);
+
+
+  const onSuccess = (hash) => {
+    const state = generateRandomString(25);
+    const codeChallenge = Base64url.encode(hash);
+    const redirectUri = encodeURI(config.origin);
+    const loginUrl = `${config.loginUrl}/oauth2/authorize`;
+
+    window.localStorage.setItem('codeVerifier', codeVerifier);
+
+    // const url = `${loginUrl}?client_id=${config.clientId}&code_challenge_method=S256&code_challenge=${codeChallenge}
+    // &redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
+
+    const url = `${loginUrl}?client_id=${config.clientId}&redirect_uri=${redirectUri}&response_type=code
+      &state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
+
+    window.location.replace(url);
+  };
+
+  const onError = () => console.log('Failed to authorize');
+  const encrypt = crypto.subtle.digest("SHA-256", uint8array);
+  encrypt.then(onSuccess, onError);
+}
+
+// Fixme
+function authorize2(config) {
   return new Promise((resolve, reject) => {
+
     const crypto = window.crypto || window.msCrypto;
     const codeVerifier = generateRandomString(32);
     const uint8array = new TextEncodingShim.TextEncoder('utf-8').encode(codeVerifier);
 
+
     const onSuccess = (hash) => {
       const state = generateRandomString(25);
       const codeChallenge = Base64url.encode(hash);
-      const redirectUri = encodeURI(config.origin);
+      const redirectUri = encodeURI('http://localhost:4200/oauth2');
       const loginUrl = `${config.loginUrl}/oauth2/authorize`;
 
       window.localStorage.setItem('codeVerifier', codeVerifier);
@@ -19,8 +54,7 @@ function authorize(config) {
       // const url = `${loginUrl}?client_id=${config.clientId}&code_challenge_method=S256&code_challenge=${codeChallenge}
       // &redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
 
-      const url = `${loginUrl}?client_id=${config.clientId}&redirect_uri=${redirectUri}&response_type=code
-      &state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
+      const url = `${loginUrl}?client_id=${config.clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=openid&prompt=none&federation_hint=PARNASSYS&oauth2=authorize`;
 
       resolve(url);
     };
@@ -31,9 +65,14 @@ function authorize(config) {
   });
 }
 
-function refresh() {
-  // Open iframe
-  // Doe authorize request
+function refresh(config) {
+  onSilentCallback = config.onSilentCallback;
+  onErrorCallback = config.onErrorCallback;
+
+  const onSuccess = (url) => setupIFrame(url);
+  const onError = () => {};
+
+  authorize2(config).then(onSuccess, onError);
 
 }
 
@@ -42,31 +81,46 @@ function invalidate() {
 }
 
 function exchangeToken(code, config) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
 
-    xhr.onreadystatechange = function () {
-      if (xhr.readyState === XMLHttpRequest.DONE) {
-        window.localStorage.removeItem('codeVerifier');
+  if (!code || !config) {
+    return;
+  }
 
-        if (xhr.status === 200) {
-          const response = JSON.parse(xhr.response);
-          resolve(response);
-        } else if (xhr.status === 400) {
-          reject('There was an error 400');
-        } else {
-          reject('something else other than 200 was returned');
+  const xhr = new XMLHttpRequest();
+
+  xhr.onreadystatechange = function () {
+    if (xhr.readyState === XMLHttpRequest.DONE) {
+      window.localStorage.removeItem('codeVerifier');
+
+      if (xhr.status === 200) {
+        const response = JSON.parse(xhr.response);
+
+        if (inIframe()) {
+          removeIframe();
+          return parent.postMessage({success: response}, 'http://localhost:4200/oauth2');
         }
+
+        config.onLoginCallback.apply(this, [response]);
+      } else {
+        parent.postMessage({error: 'error'}, 'http://localhost:4200/oauth2');
       }
-    };
+    }
+  };
 
-    const codeVerifier = window.localStorage.getItem('codeVerifier');
-    const url = `${config.loginUrl}?code=${code}&client_id=${config.clientId}&grant_type=authorization_code&code_verifier=${codeVerifier}`;
+  const codeVerifier = window.localStorage.getItem('codeVerifier');
+  const url = `${config.loginUrl}?code=${code}&client_id=${config.clientId}&grant_type=authorization_code&code_verifier=${codeVerifier}`;
 
-    xhr.open("POST", url, true);
-    xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-    xhr.send();
-  });
+  xhr.open("POST", url, true);
+  xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+  xhr.send();
+}
+
+function removeIframe() {
+  const container = document.getElementById('iframeContainer');
+
+  if (container.childNodes.length > 0) {
+    container.removeChild(container.childNodes[0]);
+  }
 }
 
 function generateRandomString(amount) {
@@ -82,20 +136,38 @@ function generateRandomString(amount) {
   return arr2.join("");
 }
 
-function setupIFrame(config) {
-  const iFrameElement = _createIFrame(config);
+function setupIFrame(url) {
+  const iFrameElement = createIframe(url);
   const container = document.getElementById('iframeContainer');
   container.appendChild(iFrameElement);
 }
 
-function _createIFrame(config) {
+function createIframe(url) {
   const iFrameElement = document.createElement('iframe');
-  iFrameElement.setAttribute("src", 'https://www.google.com/webhp?igu=1');
+  iFrameElement.setAttribute("src", url);
   iFrameElement.style.width = "40rem";
   iFrameElement.style.height = "20rem";
 
   return iFrameElement;
 }
+
+// Create IE + others compatible event handler
+const eventMethod = window.addEventListener ? "addEventListener" : "attachEvent";
+const eventer = window[eventMethod];
+const messageEvent = eventMethod === "attachEvent" ? "onmessage" : "message";
+
+// Listen to message from child window
+eventer(messageEvent,function(e) {
+  if(typeof e.data === "string" && e.data.startsWith("ERROR")){
+    alert("Opnieuw inloggen nodig");
+  } else {
+    if (onSilentCallback && e.data.success) {
+      onSilentCallback.apply(this, [e.data.success]);
+    } else if (onErrorCallback && e.data.error) {
+      onErrorCallback.apply(this, [e.data.error]);
+    }
+  }
+}, false);
 
 function inIframe () {
   try {
