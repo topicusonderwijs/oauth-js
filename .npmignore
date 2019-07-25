@@ -1,0 +1,9 @@
+# dependencies
+node_modules
+
+# misc
+.editorconfig
+.jshintrc
+.idea
+.DS_Store
+package-lock.json
