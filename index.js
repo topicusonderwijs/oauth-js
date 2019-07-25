@@ -1,41 +1,11 @@
-const Base64url = require('base64url');
 const TextEncodingShim = require('text-encoding-shim');
 const Promise = require('promise-polyfill').default;
 
 let onSilentCallback;
 let onErrorCallback;
 
-// Fixme
+
 function authorize(config) {
-  const crypto = window.crypto || window.msCrypto;
-  const codeVerifier = generateRandomString(32);
-  const uint8array = new TextEncodingShim.TextEncoder('utf-8').encode(codeVerifier);
-
-
-  const onSuccess = (hash) => {
-    const state = generateRandomString(25);
-    const codeChallenge = Base64url.encode(hash);
-    const redirectUri = encodeURI(config.origin);
-    const loginUrl = `${config.loginUrl}/oauth2/authorize`;
-
-    window.localStorage.setItem('codeVerifier', codeVerifier);
-
-    // const url = `${loginUrl}?client_id=${config.clientId}&code_challenge_method=S256&code_challenge=${codeChallenge}
-    // &redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
-
-    const url = `${loginUrl}?client_id=${config.clientId}&redirect_uri=${redirectUri}&response_type=code
-      &state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
-
-    window.location.replace(url);
-  };
-
-  const onError = () => console.log('Failed to authorize');
-  const encrypt = crypto.subtle.digest("SHA-256", uint8array);
-  encrypt.then(onSuccess, onError);
-}
-
-// Fixme
-function authorize2(config) {
   return new Promise((resolve, reject) => {
 
     const crypto = window.crypto || window.msCrypto;
@@ -44,17 +14,15 @@ function authorize2(config) {
 
 
     const onSuccess = (hash) => {
+      // Code challenge nog toevoegen
       const state = generateRandomString(25);
-      const codeChallenge = Base64url.encode(hash);
-      const redirectUri = encodeURI('http://localhost:4200/oauth2');
-      const loginUrl = `${config.loginUrl}/oauth2/authorize`;
+      const redirectUri = encodeURI(config.redirectUri);
+      const prompt = config.usePrompt ? '&prompt=none' : '';
 
       window.localStorage.setItem('codeVerifier', codeVerifier);
 
-      // const url = `${loginUrl}?client_id=${config.clientId}&code_challenge_method=S256&code_challenge=${codeChallenge}
-      // &redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=profile&federation_hint=PARNASSYS&oauth2=authorize`;
-
-      const url = `${loginUrl}?client_id=${config.clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=openid&prompt=none&federation_hint=PARNASSYS&oauth2=authorize`;
+      const url = `${config.loginUrl}?client_id=${config.clientId}&redirect_uri=${redirectUri}&response_type=${config.responseType}
+      &state=${state}&scope=${config.scope}&federation_hint=${config.federationHint}&oauth2=authorize${prompt}`;
 
       resolve(url);
     };
@@ -72,7 +40,7 @@ function refresh(config) {
   const onSuccess = (url) => setupIFrame(url);
   const onError = () => {};
 
-  authorize2(config).then(onSuccess, onError);
+  authorize(config).then(onSuccess, onError);
 
 }
 
@@ -96,7 +64,6 @@ function exchangeToken(code, config) {
         const response = JSON.parse(xhr.response);
 
         if (inIframe()) {
-          removeIframe();
           return parent.postMessage({success: response}, 'http://localhost:4200/oauth2');
         }
 
@@ -115,14 +82,6 @@ function exchangeToken(code, config) {
   xhr.send();
 }
 
-function removeIframe() {
-  const container = document.getElementById('iframeContainer');
-
-  if (container.childNodes.length > 0) {
-    container.removeChild(container.childNodes[0]);
-  }
-}
-
 function generateRandomString(amount) {
   const arr = new Uint8Array(amount);
   const arr2 = new Array(amount);
@@ -137,18 +96,32 @@ function generateRandomString(amount) {
 }
 
 function setupIFrame(url) {
-  const iFrameElement = createIframe(url);
-  const container = document.getElementById('iframeContainer');
-  container.appendChild(iFrameElement);
+  const iFrameContainer = createIframe(url);
+  const body = document.getElementsByTagName("BODY")[0];
+  body.appendChild(iFrameContainer);
 }
 
 function createIframe(url) {
+  const iFrameContainer = document.createElement('div');
+  iFrameContainer.setAttribute("id", 'authFrameContainer');
+  iFrameContainer.style.display = "none";
+
   const iFrameElement = document.createElement('iframe');
   iFrameElement.setAttribute("src", url);
+  iFrameElement.setAttribute("id", 'authFrame');
   iFrameElement.style.width = "40rem";
   iFrameElement.style.height = "20rem";
 
-  return iFrameElement;
+  iFrameContainer.appendChild(iFrameElement);
+  return iFrameContainer;
+}
+
+function removeIframe() {
+  const frame = document.getElementById('#authFrameContainer');
+
+  if (frame) {
+    frame.parentNode.removeChild(frame);
+  }
 }
 
 // Create IE + others compatible event handler
@@ -166,6 +139,8 @@ eventer(messageEvent,function(e) {
     } else if (onErrorCallback && e.data.error) {
       onErrorCallback.apply(this, [e.data.error]);
     }
+
+    // removeIframe();
   }
 }, false);
 
