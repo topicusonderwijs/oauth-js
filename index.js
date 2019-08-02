@@ -4,12 +4,12 @@ function authorize(config) {
   return oauth.authorize(config);
 }
 
-function refresh(config) {
-  return oauth.refresh(config);
-}
-
 function exchangeToken(code, config) {
   return oauth.exchangeToken(code, config);
+}
+
+function refresh(config) {
+  return oauth.refresh(config);
 }
 
 function invalidate() {
